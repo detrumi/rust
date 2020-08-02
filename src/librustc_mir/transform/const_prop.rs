@@ -831,7 +831,7 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
                     // Rvalue is also a pair with two scalars. The more general case is more
                     // complicated to implement so we'll do it later.
                     // FIXME: implement the general case stated above ^.
-                    let ty = &value.layout.ty.kind;
+                    let ty = &value.layout.ty.kind();
                     // Only do it for tuples
                     if let ty::Tuple(substs) = ty {
                         // Only do it if tuple is also a pair with two scalars

@@ -890,7 +890,7 @@ impl<'tcx> LateLintPass<'tcx> for MutableTransmutes {
     fn check_expr(&mut self, cx: &LateContext<'_>, expr: &hir::Expr<'_>) {
         use rustc_target::spec::abi::Abi::RustIntrinsic;
         if let Some((&ty::Ref(_, _, from_mt), &ty::Ref(_, _, to_mt))) =
-            get_transmute_from_to(cx, expr).map(|(ty1, ty2)| (&ty1.kind, &ty2.kind))
+            get_transmute_from_to(cx, expr).map(|(ty1, ty2)| (ty1.kind(), ty2.kind()))
         {
             if to_mt == hir::Mutability::Mut && from_mt == hir::Mutability::Not {
                 let msg = "mutating transmuted &mut T from &T may cause undefined behavior, \
@@ -1937,13 +1937,13 @@ impl<'tcx> LateLintPass<'tcx> for InvalidValue {
             init: InitKind,
         ) -> Option<InitError> {
             use rustc_middle::ty::TyKind::*;
-            match ty.kind {
+            match ty.kind() {
                 // Primitive types that don't like 0 as a value.
                 Ref(..) => Some(("references must be non-null".to_string(), None)),
                 Adt(..) if ty.is_box() => Some(("`Box` must be non-null".to_string(), None)),
                 FnPtr(..) => Some(("function pointers must be non-null".to_string(), None)),
                 Never => Some(("the `!` type has no valid value".to_string(), None)),
-                RawPtr(tm) if matches!(tm.ty.kind, Dynamic(..)) =>
+                RawPtr(tm) if matches!(tm.ty.kind(), Dynamic(..)) =>
                 // raw ptr to dyn Trait
                 {
                     Some(("the vtable of a wide raw pointer must be non-null".to_string(), None))
@@ -2161,8 +2161,8 @@ impl ClashingExternDeclarations {
         } else {
             // Do a full, depth-first comparison between the two.
             use rustc_middle::ty::TyKind::*;
-            let a_kind = &a.kind;
-            let b_kind = &b.kind;
+            let a_kind = &a.kind();
+            let b_kind = &b.kind();
 
             let compare_layouts = |a, b| -> bool {
                 let a_layout = &cx.layout_of(a).unwrap().layout.abi;
@@ -2181,7 +2181,7 @@ impl ClashingExternDeclarations {
                     let b = b.subst(cx.tcx, b_substs);
                     debug!("Comparing {:?} and {:?}", a, b);
 
-                    if let (Adt(a_def, ..), Adt(b_def, ..)) = (&a.kind, &b.kind) {
+                    if let (Adt(a_def, ..), Adt(b_def, ..)) = (a.kind(), b.kind()) {
                         // Grab a flattened representation of all fields.
                         let a_fields = a_def.variants.iter().flat_map(|v| v.fields.iter());
                         let b_fields = b_def.variants.iter().flat_map(|v| v.fields.iter());
@@ -2257,7 +2257,7 @@ impl ClashingExternDeclarations {
                     if is_primitive_or_pointer(other_kind) =>
                 {
                     let (primitive, adt) =
-                        if is_primitive_or_pointer(&a.kind) { (a, b) } else { (b, a) };
+                        if is_primitive_or_pointer(a.kind()) { (a, b) } else { (b, a) };
                     if let Some(ty) = crate::types::repr_nullable_ptr(cx, adt, ckind) {
                         ty == primitive
                     } else {

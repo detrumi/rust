@@ -124,7 +124,7 @@ fn mark_used_by_predicates<'tcx>(
 
     let is_self_ty_used = |unused_parameters: &mut FiniteBitSet<u32>, self_ty: Ty<'tcx>| {
         debug!("unused_generic_params: self_ty={:?}", self_ty);
-        if let ty::Param(param) = self_ty.kind {
+        if let ty::Param(param) = self_ty.kind() {
             !unused_parameters.contains(param.index).unwrap_or(false)
         } else {
             false
@@ -296,7 +296,7 @@ impl<'a, 'tcx> TypeVisitor<'tcx> for UsedGenericParametersVisitor<'a, 'tcx> {
             return false;
         }
 
-        match ty.kind {
+        match *ty.kind() {
             ty::Closure(def_id, substs) | ty::Generator(def_id, substs, ..) => {
                 debug!("visit_ty: def_id={:?}", def_id);
                 // Avoid cycle errors with generators.

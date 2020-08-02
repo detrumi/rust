@@ -55,7 +55,7 @@ fn coverageinfo_from_mir<'tcx>(tcx: TyCtxt<'tcx>, mir_def_id: DefId) -> Coverage
         traversal::preorder(mir_body).map(|(_, data)| data).filter_map(call_terminators)
     {
         if let TerminatorKind::Call { func: Operand::Constant(func), args, .. } = &terminator.kind {
-            match func.literal.ty.kind {
+            match *func.literal.ty.kind() {
                 FnDef(id, _) if id == count_code_region_fn => {
                     let counter_id_arg =
                         args.get(count_code_region_args::COUNTER_ID).expect("arg found");

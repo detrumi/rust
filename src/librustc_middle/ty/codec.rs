@@ -33,8 +33,10 @@ pub trait EncodableWithShorthand: Clone + Eq + Hash {
 #[allow(rustc::usage_of_ty_tykind)]
 impl<'tcx> EncodableWithShorthand for Ty<'tcx> {
     type Variant = ty::TyKind<'tcx>;
+
+    #[inline]
     fn variant(&self) -> &Self::Variant {
-        &self.kind
+        self.kind()
     }
 }
 
