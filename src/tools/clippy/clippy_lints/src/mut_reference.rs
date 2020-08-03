@@ -54,11 +54,11 @@ impl<'tcx> LateLintPass<'tcx> for UnnecessaryMutPassed {
 }
 
 fn check_arguments<'tcx>(cx: &LateContext<'tcx>, arguments: &[Expr<'_>], type_definition: Ty<'tcx>, name: &str) {
-    match type_definition.kind {
+    match type_definition.kind() {
         ty::FnDef(..) | ty::FnPtr(_) => {
             let parameters = type_definition.fn_sig(cx.tcx).skip_binder().inputs();
             for (argument, parameter) in arguments.iter().zip(parameters.iter()) {
-                match parameter.kind {
+                match parameter.kind() {
                     ty::Ref(_, _, Mutability::Not)
                     | ty::RawPtr(ty::TypeAndMut {
                         mutbl: Mutability::Not, ..

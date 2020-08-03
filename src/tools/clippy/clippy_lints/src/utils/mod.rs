@@ -128,7 +128,7 @@ pub fn is_wild<'tcx>(pat: &impl std::ops::Deref<Target = Pat<'tcx>>) -> bool {
 
 /// Checks if type is struct, enum or union type with the given def path.
 pub fn match_type(cx: &LateContext<'_>, ty: Ty<'_>, path: &[&str]) -> bool {
-    match ty.kind {
+    match ty.kind() {
         ty::Adt(adt, _) => match_def_path(cx, adt.did, path),
         _ => false,
     }
@@ -136,7 +136,7 @@ pub fn match_type(cx: &LateContext<'_>, ty: Ty<'_>, path: &[&str]) -> bool {
 
 /// Checks if the type is equal to a diagnostic item
 pub fn is_type_diagnostic_item(cx: &LateContext<'_>, ty: Ty<'_>, diag_item: Symbol) -> bool {
-    match ty.kind {
+    match ty.kind() {
         ty::Adt(adt, _) => cx.tcx.is_diagnostic_item(diag_item, adt.did),
         _ => false,
     }
@@ -742,7 +742,7 @@ pub fn walk_ptrs_hir_ty<'tcx>(ty: &'tcx hir::Ty<'tcx>) -> &'tcx hir::Ty<'tcx> {
 
 /// Returns the base type for references and raw pointers.
 pub fn walk_ptrs_ty(ty: Ty<'_>) -> Ty<'_> {
-    match ty.kind {
+    match ty.kind() {
         ty::Ref(_, ty, _) => walk_ptrs_ty(ty),
         _ => ty,
     }
@@ -752,7 +752,7 @@ pub fn walk_ptrs_ty(ty: Ty<'_>) -> Ty<'_> {
 /// depth.
 pub fn walk_ptrs_ty_depth(ty: Ty<'_>) -> (Ty<'_>, usize) {
     fn inner(ty: Ty<'_>, depth: usize) -> (Ty<'_>, usize) {
-        match ty.kind {
+        match ty.kind() {
             ty::Ref(_, ty, _) => inner(ty, depth + 1),
             _ => (ty, depth),
         }
@@ -857,7 +857,7 @@ pub fn return_ty<'tcx>(cx: &LateContext<'tcx>, fn_item: hir::HirId) -> Ty<'tcx> 
 
 /// Returns `true` if the given type is an `unsafe` function.
 pub fn type_is_unsafe_function<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    match ty.kind {
+    match ty.kind() {
         ty::FnDef(..) | ty::FnPtr(_) => ty.fn_sig(cx.tcx).unsafety() == Unsafety::Unsafe,
         _ => false,
     }
@@ -922,7 +922,7 @@ pub fn is_refutable(cx: &LateContext<'_>, pat: &Pat<'_>) -> bool {
             is_enum_variant(cx, qpath, pat.hir_id) || are_refutable(cx, pats.iter().map(|pat| &**pat))
         },
         PatKind::Slice(ref head, ref middle, ref tail) => {
-            match &cx.typeck_results().node_type(pat.hir_id).kind {
+            match &cx.typeck_results().node_type(pat.hir_id).kind() {
                 ty::Slice(..) => {
                     // [..] is the only irrefutable slice pattern.
                     !head.is_empty() || middle.is_none() || !tail.is_empty()
@@ -1136,12 +1136,12 @@ pub fn has_iter_method(cx: &LateContext<'_>, probably_ref_ty: Ty<'_>) -> Option<
         &paths::RECEIVER,
     ];
 
-    let ty_to_check = match probably_ref_ty.kind {
+    let ty_to_check = match probably_ref_ty.kind() {
         ty::Ref(_, ty_to_check, _) => ty_to_check,
         _ => probably_ref_ty,
     };
 
-    let def_id = match ty_to_check.kind {
+    let def_id = match ty_to_check.kind() {
         ty::Array(..) => return Some("array"),
         ty::Slice(..) => return Some("slice"),
         ty::Adt(adt, _) => adt.did,
@@ -1257,7 +1257,7 @@ pub fn must_use_attr(attrs: &[Attribute]) -> Option<&Attribute> {
 
 // Returns whether the type has #[must_use] attribute
 pub fn is_must_use_ty<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> bool {
-    match ty.kind {
+    match ty.kind() {
         ty::Adt(ref adt, _) => must_use_attr(&cx.tcx.get_attrs(adt.did)).is_some(),
         ty::Foreign(ref did) => must_use_attr(&cx.tcx.get_attrs(*did)).is_some(),
         ty::Slice(ref ty)

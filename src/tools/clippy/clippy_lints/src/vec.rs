@@ -37,8 +37,8 @@ impl<'tcx> LateLintPass<'tcx> for UselessVec {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
         // search for `&vec![_]` expressions where the adjusted type is `&[_]`
         if_chain! {
-            if let ty::Ref(_, ty, _) = cx.typeck_results().expr_ty_adjusted(expr).kind;
-            if let ty::Slice(..) = ty.kind;
+            if let ty::Ref(_, ty, _) = cx.typeck_results().expr_ty_adjusted(expr).kind();
+            if let ty::Slice(..) = ty.kind();
             if let ExprKind::AddrOf(BorrowKind::Ref, _, ref addressee) = expr.kind;
             if let Some(vec_args) = higher::vec_macro(cx, addressee);
             then {
@@ -104,7 +104,7 @@ fn check_vec_macro<'tcx>(cx: &LateContext<'tcx>, vec_args: &higher::VecArgs<'tcx
 
 /// Returns the item type of the vector (i.e., the `T` in `Vec<T>`).
 fn vec_type(ty: Ty<'_>) -> Ty<'_> {
-    if let ty::Adt(_, substs) = ty.kind {
+    if let ty::Adt(_, substs) = ty.kind() {
         substs.type_at(0)
     } else {
         panic!("The type of `vec!` is a not a struct?");

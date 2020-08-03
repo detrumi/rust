@@ -118,7 +118,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                 {
                     return Err(ErrorKind::ResolutionFailure);
                 }
-                match cx.tcx.type_of(did).kind {
+                match cx.tcx.type_of(did).kind() {
                     ty::Adt(def, _) if def.is_enum() => {
                         if def.all_fields().any(|item| item.ident.name == variant_field_name) {
                             Ok((
@@ -361,7 +361,7 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
                             Ok((ty_res, Some(format!("{}.{}", out, item_name))))
                         }
                     } else {
-                        match cx.tcx.type_of(did).kind {
+                        match *cx.tcx.type_of(did).kind() {
                             ty::Adt(def, _) => {
                                 if let Some(item) = if def.is_enum() {
                                     def.all_fields().find(|item| item.ident.name == item_name)
