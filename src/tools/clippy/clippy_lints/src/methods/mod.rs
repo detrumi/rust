@@ -2569,9 +2569,9 @@ fn lint_map_flatten<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, map
     // lint if caller of `.map().flatten()` is an Iterator
     if match_trait_method(cx, expr, &paths::ITERATOR) {
         let map_closure_ty = cx.typeck_results().expr_ty(&map_args[1]);
-        let is_map_to_option = match map_closure_ty.kind {
+        let is_map_to_option = match map_closure_ty.kind() {
             ty::Closure(_, _) | ty::FnDef(_, _) | ty::FnPtr(_) => {
-                let map_closure_sig = match map_closure_ty.kind {
+                let map_closure_sig = match map_closure_ty.kind() {
                     ty::Closure(_, substs) => substs.as_closure().sig(),
                     _ => map_closure_ty.fn_sig(cx.tcx),
                 };
