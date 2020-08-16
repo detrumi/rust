@@ -179,13 +179,15 @@ fn closure_return_type_suggestion(
 }
 
 /// Given a closure signature, return a `String` containing a list of all its argument types.
-fn closure_args(fn_sig: &ty::PolyFnSig<'_>) -> String {
+fn closure_args(fn_sig: &ty::PolyFnSig<'_>, tcx: TyCtxt<'tcx>) -> String {
     fn_sig
         .inputs()
         .skip_binder()
         .iter()
         .next()
-        .map(|args| args.tuple_fields().map(|arg| arg.to_string()).collect::<Vec<_>>().join(", "))
+        .map(|args| {
+            args.tuple_fields(tcx).map(|arg| arg.to_string()).collect::<Vec<_>>().join(", ")
+        })
         .unwrap_or_default()
 }
 
@@ -222,7 +224,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         ty: Ty<'tcx>,
         highlight: Option<ty::print::RegionHighlightMode>,
     ) -> (String, Option<Span>, Cow<'static, str>, Option<String>, Option<&'static str>) {
-        if let ty::Infer(ty::TyVar(ty_vid)) = *ty.kind() {
+        if let ty::Infer(ty::TyVar(ty_vid)) = *ty.kind(self.tcx) {
             let mut inner = self.inner.borrow_mut();
             let ty_vars = &inner.type_variables();
             let var_origin = ty_vars.var_origin(ty_vid);
@@ -260,7 +262,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             printer.region_highlight_mode = highlight;
         }
         let _ = ty.print(printer);
-        (s, None, ty.prefix_string(), None, None)
+        (s, None, ty.prefix_string(self.tcx), None, None)
     }
 
     // FIXME(eddyb) generalize all of this to handle `ty::Const` inference variables as well.

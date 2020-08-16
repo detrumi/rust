@@ -495,7 +495,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
         };
         debug_assert!(!ty.has_infer_types_or_consts());
 
-        Ok(match *ty.kind() {
+        Ok(match *ty.kind(tcx) {
             // Basic scalars.
             ty::Bool => tcx.intern_layout(Layout::scalar(
                 self,
@@ -530,7 +530,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             // Potentially-wide pointers.
             ty::Ref(_, pointee, _) | ty::RawPtr(ty::TypeAndMut { ty: pointee, .. }) => {
                 let mut data_ptr = scalar_unit(Pointer);
-                if !ty.is_unsafe_ptr() {
+                if !ty.is_unsafe_ptr(tcx) {
                     data_ptr.valid_range = 1..=*data_ptr.valid_range.end();
                 }
 
@@ -540,7 +540,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
                 }
 
                 let unsized_part = tcx.struct_tail_erasing_lifetimes(pointee, param_env);
-                let metadata = match unsized_part.kind() {
+                let metadata = match unsized_part.kind(tcx) {
                     ty::Foreign(..) => {
                         return Ok(tcx.intern_layout(Layout::scalar(self, data_ptr)));
                     }
@@ -627,7 +627,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             ty::Generator(def_id, substs, _) => self.generator_layout(ty, def_id, substs)?,
 
             ty::Closure(_, ref substs) => {
-                let tys = substs.as_closure().upvar_tys();
+                let tys = substs.as_closure().upvar_tys(tcx);
                 univariant(
                     &tys.map(|ty| self.layout_of(ty)).collect::<Result<Vec<_>, _>>()?,
                     &ReprOptions::default(),
@@ -1417,7 +1417,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
         // Build a prefix layout, including "promoting" all ineligible
         // locals as part of the prefix. We compute the layout of all of
         // these fields at once to get optimal packing.
-        let tag_index = substs.as_generator().prefix_tys().count();
+        let tag_index = substs.as_generator().prefix_tys(tcx).count();
 
         // `info.variant_fields` already accounts for the reserved variants, so no need to add them.
         let max_discr = (info.variant_fields.len() - 1) as u128;
@@ -1434,7 +1434,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             .map(|ty| self.layout_of(ty));
         let prefix_layouts = substs
             .as_generator()
-            .prefix_tys()
+            .prefix_tys(tcx)
             .map(|ty| self.layout_of(ty))
             .chain(iter::once(Ok(tag_layout)))
             .chain(promoted_layouts)
@@ -1624,7 +1624,7 @@ impl<'tcx> LayoutCx<'tcx, TyCtxt<'tcx>> {
             );
         };
 
-        let adt_def = match *layout.ty.kind() {
+        let adt_def = match *layout.ty.kind(self.tcx) {
             ty::Adt(ref adt_def, _) => {
                 debug!("print-type-size t: `{:?}` process adt", layout.ty);
                 adt_def
@@ -1767,11 +1767,11 @@ impl<'tcx> SizeSkeleton<'tcx> {
             Err(err) => err,
         };
 
-        match *ty.kind() {
+        match *ty.kind(tcx) {
             ty::Ref(_, pointee, _) | ty::RawPtr(ty::TypeAndMut { ty: pointee, .. }) => {
-                let non_zero = !ty.is_unsafe_ptr();
+                let non_zero = !ty.is_unsafe_ptr(tcx);
                 let tail = tcx.struct_tail_erasing_lifetimes(pointee, param_env);
-                match tail.kind() {
+                match tail.kind(tcx) {
                     ty::Param(_) | ty::Projection(_) => {
                         debug_assert!(tail.has_param_types_or_consts());
                         Ok(SizeSkeleton::Pointer { non_zero, tail: tcx.erase_regions(&tail) })
@@ -2018,13 +2018,13 @@ where
                     assert_eq!(original_layout.variants, Variants::Single { index });
                 }
 
-                let fields = match this.ty.kind() {
+                let tcx = cx.tcx();
+                let fields = match this.ty.kind(tcx) {
                     ty::Adt(def, _) if def.variants.is_empty() =>
                         bug!("for_variant called on zero-variant enum"),
                     ty::Adt(def, _) => def.variants[variant_index].fields.len(),
                     _ => bug!(),
                 };
-                let tcx = cx.tcx();
                 tcx.intern_layout(Layout {
                     variants: Variants::Single { index: variant_index },
                     fields: match NonZeroUsize::new(fields) {
@@ -2056,7 +2056,7 @@ where
             }))
         };
 
-        cx.layout_of(match *this.ty.kind() {
+        cx.layout_of(match *this.ty.kind(tcx) {
             ty::Bool
             | ty::Char
             | ty::Int(_)
@@ -2079,7 +2079,7 @@ where
                 // as the `Abi` or `FieldsShape` is checked by users.
                 if i == 0 {
                     let nil = tcx.mk_unit();
-                    let ptr_ty = if this.ty.is_unsafe_ptr() {
+                    let ptr_ty = if this.ty.is_unsafe_ptr(tcx) {
                         tcx.mk_mut_ptr(nil)
                     } else {
                         tcx.mk_mut_ref(tcx.lifetimes.re_static, nil)
@@ -2092,7 +2092,7 @@ where
                     ));
                 }
 
-                match tcx.struct_tail_erasing_lifetimes(pointee, cx.param_env()).kind() {
+                match tcx.struct_tail_erasing_lifetimes(pointee, cx.param_env()).kind(tcx) {
                     ty::Slice(_) | ty::Str => tcx.types.usize,
                     ty::Dynamic(_, _) => {
                         tcx.mk_imm_ref(tcx.lifetimes.re_static, tcx.mk_array(tcx.types.usize, 3))
@@ -2119,7 +2119,7 @@ where
             ty::Str => tcx.types.u8,
 
             // Tuples, generators and closures.
-            ty::Closure(_, ref substs) => substs.as_closure().upvar_tys().nth(i).unwrap(),
+            ty::Closure(_, ref substs) => substs.as_closure().upvar_tys(tcx).nth(i).unwrap(),
 
             ty::Generator(def_id, ref substs, _) => match this.variants {
                 Variants::Single { index } => substs
@@ -2133,7 +2133,7 @@ where
                     if i == tag_field {
                         return tag_layout(tag);
                     }
-                    substs.as_generator().prefix_tys().nth(i).unwrap()
+                    substs.as_generator().prefix_tys(tcx).nth(i).unwrap()
                 }
             },
 
@@ -2166,11 +2166,16 @@ where
     }
 
     fn pointee_info_at(this: TyAndLayout<'tcx>, cx: &C, offset: Size) -> Option<PointeeInfo> {
+        let tcx = cx.tcx();
         let addr_space_of_ty = |ty: Ty<'tcx>| {
-            if ty.is_fn() { cx.data_layout().instruction_address_space } else { AddressSpace::DATA }
+            if ty.is_fn(tcx) {
+                cx.data_layout().instruction_address_space
+            } else {
+                AddressSpace::DATA
+            }
         };
 
-        let pointee_info = match *this.ty.kind() {
+        let pointee_info = match *this.ty.kind(tcx) {
             ty::RawPtr(mt) if offset.bytes() == 0 => {
                 cx.layout_of(mt.ty).to_result().ok().map(|layout| PointeeInfo {
                     size: layout.size,
@@ -2180,18 +2185,15 @@ where
                 })
             }
             ty::FnPtr(fn_sig) if offset.bytes() == 0 => {
-                cx.layout_of(cx.tcx().mk_fn_ptr(fn_sig)).to_result().ok().map(|layout| {
-                    PointeeInfo {
-                        size: layout.size,
-                        align: layout.align.abi,
-                        safe: None,
-                        address_space: cx.data_layout().instruction_address_space,
-                    }
+                cx.layout_of(tcx.mk_fn_ptr(fn_sig)).to_result().ok().map(|layout| PointeeInfo {
+                    size: layout.size,
+                    align: layout.align.abi,
+                    safe: None,
+                    address_space: cx.data_layout().instruction_address_space,
                 })
             }
             ty::Ref(_, ty, mt) if offset.bytes() == 0 => {
                 let address_space = addr_space_of_ty(ty);
-                let tcx = cx.tcx();
                 let is_freeze = ty.is_freeze(tcx.at(DUMMY_SP), cx.param_env());
                 let kind = match mt {
                     hir::Mutability::Not => {
@@ -2286,7 +2288,7 @@ where
 
                 // FIXME(eddyb) This should be for `ptr::Unique<T>`, not `Box<T>`.
                 if let Some(ref mut pointee) = result {
-                    if let ty::Adt(def, _) = this.ty.kind() {
+                    if let ty::Adt(def, _) = this.ty.kind(tcx) {
                         if def.is_box() && offset.bytes() == 0 {
                             pointee.safe = Some(PointerKind::UniqueOwned);
                         }
@@ -2300,7 +2302,7 @@ where
         debug!(
             "pointee_info_at (offset={:?}, type kind: {:?}) => {:?}",
             offset,
-            this.ty.kind(),
+            this.ty.kind(tcx),
             pointee_info
         );
 
@@ -2328,14 +2330,14 @@ impl<'tcx> ty::Instance<'tcx> {
     fn fn_sig_for_fn_abi(&self, tcx: TyCtxt<'tcx>) -> ty::PolyFnSig<'tcx> {
         // FIXME(davidtwco,eddyb): A `ParamEnv` should be passed through to this function.
         let ty = self.ty(tcx, ty::ParamEnv::reveal_all());
-        match *ty.kind() {
+        match *ty.kind(tcx) {
             ty::FnDef(..) => {
                 // HACK(davidtwco,eddyb): This is a workaround for polymorphization considering
                 // parameters unused if they show up in the signature, but not in the `mir::Body`
                 // (i.e. due to being inside a projection that got normalized, see
                 // `src/test/ui/polymorphization/normalized_sig_types.rs`), and codegen not keeping
                 // track of a polymorphization `ParamEnv` to allow normalizing later.
-                let mut sig = match *ty.kind() {
+                let mut sig = match *ty.kind(tcx) {
                     ty::FnDef(def_id, substs) => tcx
                         .normalize_erasing_regions(tcx.param_env(def_id), tcx.fn_sig(def_id))
                         .subst(tcx, substs),
@@ -2354,7 +2356,7 @@ impl<'tcx> ty::Instance<'tcx> {
                 sig
             }
             ty::Closure(def_id, substs) => {
-                let sig = substs.as_closure().sig();
+                let sig = substs.as_closure().sig(tcx);
 
                 let env_ty = tcx.closure_env_ty(def_id, substs).unwrap();
                 sig.map_bound(|sig| {
@@ -2523,9 +2525,10 @@ where
                     // elsewhere in the compiler as a method on a `dyn Trait`.
                     // To get the type `*mut RcBox<Self>`, we just keep unwrapping newtypes until we
                     // get a built-in pointer type
+                    let tcx = cx.tcx();
                     let mut fat_pointer_layout = layout;
-                    'descend_newtypes: while !fat_pointer_layout.ty.is_unsafe_ptr()
-                        && !fat_pointer_layout.ty.is_region_ptr()
+                    'descend_newtypes: while !fat_pointer_layout.ty.is_unsafe_ptr(tcx)
+                        && !fat_pointer_layout.ty.is_region_ptr(tcx)
                     {
                         for i in 0..fat_pointer_layout.fields.count() {
                             let field_layout = fat_pointer_layout.field(cx, i);
@@ -2598,7 +2601,7 @@ where
             assert!(!sig.c_variadic && extra_args.is_empty());
 
             if let Some(input) = sig.inputs().last() {
-                if let ty::Tuple(tupled_arguments) = input.kind() {
+                if let ty::Tuple(tupled_arguments) = input.kind(cx.tcx()) {
                     inputs = &sig.inputs()[0..sig.inputs().len() - 1];
                     tupled_arguments.iter().map(|k| k.expect_ty()).collect()
                 } else {

@@ -226,7 +226,7 @@ impl<'tcx> InstanceDef<'tcx> {
             // We include enums without destructors to allow, say, optimizing
             // drops of `Option::None` before LTO. We also respect the intent of
             // `#[inline]` on `Drop::drop` implementations.
-            return ty.ty_adt_def().map_or(true, |adt_def| {
+            return ty.ty_adt_def(tcx).map_or(true, |adt_def| {
                 adt_def.destructor(tcx).map_or(adt_def.is_enum(), |dtor| {
                     tcx.codegen_fn_attrs(dtor.did).requests_inline()
                 })
@@ -383,7 +383,7 @@ impl<'tcx> Instance<'tcx> {
         debug!("resolve(def_id={:?}, substs={:?})", def_id, substs);
         let fn_sig = tcx.fn_sig(def_id);
         let is_vtable_shim = !fn_sig.inputs().skip_binder().is_empty()
-            && fn_sig.input(0).skip_binder().is_param(0)
+            && fn_sig.input(0).skip_binder().is_param(0, tcx)
             && tcx.generics_of(def_id).has_self;
         if is_vtable_shim {
             debug!(" => associated item with unsizeable self: Self");
@@ -399,7 +399,7 @@ impl<'tcx> Instance<'tcx> {
         substs: ty::SubstsRef<'tcx>,
         requested_kind: ty::ClosureKind,
     ) -> Instance<'tcx> {
-        let actual_kind = substs.as_closure().kind();
+        let actual_kind = substs.as_closure().kind(tcx);
 
         match needs_fn_once_adapter_shim(actual_kind, requested_kind) {
             Ok(true) => Instance::fn_once_adapter_instance(tcx, def_id, substs),
@@ -430,7 +430,7 @@ impl<'tcx> Instance<'tcx> {
 
         let self_ty = tcx.mk_closure(closure_did, substs);
 
-        let sig = substs.as_closure().sig();
+        let sig = substs.as_closure().sig(tcx);
         let sig = tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), &sig);
         assert_eq!(sig.inputs().len(), 1);
         let substs = tcx.mk_substs_trait(self_ty, &[sig.inputs()[0].into()]);
@@ -498,12 +498,12 @@ fn polymorphize<'tcx>(
     // multiple mono items (and eventually symbol clashes).
     let upvars_ty = if tcx.is_closure(def_id) {
         Some(substs.as_closure().tupled_upvars_ty())
-    } else if tcx.type_of(def_id).is_generator() {
+    } else if tcx.type_of(def_id).is_generator(tcx) {
         Some(substs.as_generator().tupled_upvars_ty())
     } else {
         None
     };
-    let has_upvars = upvars_ty.map(|ty| ty.tuple_fields().count() > 0).unwrap_or(false);
+    let has_upvars = upvars_ty.map(|ty| ty.tuple_fields(tcx).count() > 0).unwrap_or(false);
     debug!("polymorphize: upvars_ty={:?} has_upvars={:?}", upvars_ty, has_upvars);
 
     struct PolymorphizationFolder<'tcx> {

@@ -680,7 +680,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     pub fn type_var_diverges(&'a self, ty: Ty<'_>) -> bool {
-        match *ty.kind() {
+        match *ty.kind(self.tcx) {
             ty::Infer(ty::TyVar(vid)) => self.inner.borrow_mut().type_variables().var_diverges(vid),
             _ => false,
         }
@@ -693,7 +693,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     pub fn type_is_unconstrained_numeric(&'a self, ty: Ty<'_>) -> UnconstrainedNumeric {
         use rustc_middle::ty::error::UnconstrainedNumeric::Neither;
         use rustc_middle::ty::error::UnconstrainedNumeric::{UnconstrainedFloat, UnconstrainedInt};
-        match *ty.kind() {
+        match *ty.kind(self.tcx) {
             ty::Infer(ty::IntVar(vid)) => {
                 if self.inner.borrow_mut().int_unification_table().probe_value(vid).is_some() {
                     Neither
@@ -983,7 +983,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         let two_unbound_type_vars = {
             let a = self.shallow_resolve(predicate.skip_binder().a);
             let b = self.shallow_resolve(predicate.skip_binder().b);
-            a.is_ty_var() && b.is_ty_var()
+            a.is_ty_var(self.tcx) && b.is_ty_var(self.tcx)
         };
 
         if two_unbound_type_vars {
@@ -1499,7 +1499,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     pub fn closure_kind(&self, closure_substs: SubstsRef<'tcx>) -> Option<ty::ClosureKind> {
         let closure_kind_ty = closure_substs.as_closure().kind_ty();
         let closure_kind_ty = self.shallow_resolve(closure_kind_ty);
-        closure_kind_ty.to_opt_closure_kind()
+        closure_kind_ty.to_opt_closure_kind(self.tcx)
     }
 
     /// Clears the selection, evaluation, and projection caches. This is useful when
@@ -1557,7 +1557,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     /// not a type variable, just return it unmodified.
     // FIXME(eddyb) inline into `ShallowResolver::visit_ty`.
     fn shallow_resolve_ty(&self, typ: Ty<'tcx>) -> Ty<'tcx> {
-        match *typ.kind() {
+        match *typ.kind(self.tcx) {
             ty::Infer(ty::TyVar(v)) => {
                 // Not entirely obvious: if `typ` is a type variable,
                 // it can be resolved to an int/float variable, which
@@ -1666,9 +1666,9 @@ impl TyOrConstInferVar<'tcx> {
     /// Tries to extract an inference variable from a type or a constant, returns `None`
     /// for types other than `ty::Infer(_)` (or `InferTy::Fresh*`) and
     /// for constants other than `ty::ConstKind::Infer(_)` (or `InferConst::Fresh`).
-    pub fn maybe_from_generic_arg(arg: GenericArg<'tcx>) -> Option<Self> {
+    pub fn maybe_from_generic_arg(arg: GenericArg<'tcx>, tcx: TyCtxt<'tcx>) -> Option<Self> {
         match arg.unpack() {
-            GenericArgKind::Type(ty) => Self::maybe_from_ty(ty),
+            GenericArgKind::Type(ty) => Self::maybe_from_ty(ty, tcx),
             GenericArgKind::Const(ct) => Self::maybe_from_const(ct),
             GenericArgKind::Lifetime(_) => None,
         }
@@ -1676,8 +1676,8 @@ impl TyOrConstInferVar<'tcx> {
 
     /// Tries to extract an inference variable from a type, returns `None`
     /// for types other than `ty::Infer(_)` (or `InferTy::Fresh*`).
-    pub fn maybe_from_ty(ty: Ty<'tcx>) -> Option<Self> {
-        match *ty.kind() {
+    pub fn maybe_from_ty(ty: Ty<'tcx>, tcx: TyCtxt<'tcx>) -> Option<Self> {
+        match *ty.kind(tcx) {
             ty::Infer(ty::TyVar(v)) => Some(TyOrConstInferVar::Ty(v)),
             ty::Infer(ty::IntVar(v)) => Some(TyOrConstInferVar::TyInt(v)),
             ty::Infer(ty::FloatVar(v)) => Some(TyOrConstInferVar::TyFloat(v)),

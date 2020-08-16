@@ -1433,7 +1433,7 @@ fn check_fn<'a, 'tcx>(
     // `!`).
     let coercion = fcx.ret_coercion.take().unwrap().into_inner();
     let mut actual_return_ty = coercion.complete(&fcx);
-    if actual_return_ty.is_never() {
+    if actual_return_ty.is_never(tcx) {
         actual_return_ty = fcx.next_diverging_ty_var(TypeVariableOrigin {
             kind: TypeVariableOriginKind::DivergingFn,
             span,
@@ -1468,15 +1468,15 @@ fn check_fn<'a, 'tcx>(
     if let Some(panic_impl_did) = tcx.lang_items().panic_impl() {
         if panic_impl_did == hir.local_def_id(fn_id).to_def_id() {
             if let Some(panic_info_did) = tcx.lang_items().panic_info() {
-                if *declared_ret_ty.kind() != ty::Never {
+                if *declared_ret_ty.kind(tcx) != ty::Never {
                     sess.span_err(decl.output.span(), "return type should be `!`");
                 }
 
                 let inputs = fn_sig.inputs();
                 let span = hir.span(fn_id);
                 if inputs.len() == 1 {
-                    let arg_is_panic_info = match *inputs[0].kind() {
-                        ty::Ref(region, ty, mutbl) => match *ty.kind() {
+                    let arg_is_panic_info = match *inputs[0].kind(tcx) {
+                        ty::Ref(region, ty, mutbl) => match *ty.kind(tcx) {
                             ty::Adt(ref adt, _) => {
                                 adt.did == panic_info_did
                                     && mutbl == hir::Mutability::Not
@@ -1512,14 +1512,14 @@ fn check_fn<'a, 'tcx>(
     if let Some(alloc_error_handler_did) = tcx.lang_items().oom() {
         if alloc_error_handler_did == hir.local_def_id(fn_id).to_def_id() {
             if let Some(alloc_layout_did) = tcx.lang_items().alloc_layout() {
-                if *declared_ret_ty.kind() != ty::Never {
+                if *declared_ret_ty.kind(tcx) != ty::Never {
                     sess.span_err(decl.output.span(), "return type should be `!`");
                 }
 
                 let inputs = fn_sig.inputs();
                 let span = hir.span(fn_id);
                 if inputs.len() == 1 {
-                    let arg_is_alloc_layout = match inputs[0].kind() {
+                    let arg_is_alloc_layout = match inputs[0].kind(tcx) {
                         ty::Adt(ref adt, _) => adt.did == alloc_layout_did,
                         _ => false,
                     };
@@ -2429,7 +2429,7 @@ fn bounds_from_generic_predicates<'tcx>(
             "<{}>",
             types
                 .keys()
-                .filter_map(|t| match t.kind() {
+                .filter_map(|t| match t.kind(tcx) {
                     ty::Param(_) => Some(t.to_string()),
                     // Avoid suggesting the following:
                     // fn foo<T, <T as Trait>::Bar>(_: T) where T: Trait, <T as Trait>::Bar: Other {}
@@ -2474,7 +2474,7 @@ fn fn_sig_suggestion<'tcx>(
         .iter()
         .enumerate()
         .map(|(i, ty)| {
-            Some(match ty.kind() {
+            Some(match ty.kind(tcx) {
                 ty::Param(_) if assoc.fn_has_self_parameter && i == 0 => "self".to_string(),
                 ty::Ref(reg, ref_ty, mutability) if i == 0 => {
                     let reg = match &format!("{}", reg)[..] {
@@ -2482,7 +2482,7 @@ fn fn_sig_suggestion<'tcx>(
                         reg => format!("{} ", reg),
                     };
                     if assoc.fn_has_self_parameter {
-                        match ref_ty.kind() {
+                        match ref_ty.kind(tcx) {
                             ty::Param(param) if param.name == kw::SelfUpper => {
                                 format!("&{}{}self", reg, mutability.prefix_str())
                             }
@@ -2507,7 +2507,7 @@ fn fn_sig_suggestion<'tcx>(
         .collect::<Vec<String>>()
         .join(", ");
     let output = sig.output();
-    let output = if !output.is_unit() { format!(" -> {:?}", output) } else { String::new() };
+    let output = if !output.is_unit(tcx) { format!(" -> {:?}", output) } else { String::new() };
 
     let unsafety = sig.unsafety.prefix_str();
     let (generics, where_clauses) = bounds_from_generic_predicates(tcx, predicates);
@@ -2587,9 +2587,9 @@ pub fn check_simd(tcx: TyCtxt<'_>, sp: Span, def_id: LocalDefId) {
                     .emit();
                 return;
             }
-            match e.kind() {
+            match e.kind(tcx) {
                 ty::Param(_) => { /* struct<T>(T, T, T, T) is ok */ }
-                _ if e.is_machine() => { /* struct(u8, u8, u8, u8) is ok */ }
+                _ if e.is_machine(tcx) => { /* struct(u8, u8, u8, u8) is ok */ }
                 _ => {
                     struct_span_err!(
                         tcx.sess,
@@ -2689,7 +2689,7 @@ fn check_packed_inner(
 
             stack.push(def_id);
             for field in &def.non_enum_variant().fields {
-                if let ty::Adt(def, _) = field.ty(tcx, substs).kind() {
+                if let ty::Adt(def, _) = field.ty(tcx, substs).kind(tcx) {
                     if !stack.contains(&def.did) {
                         if let Some(mut defs) = check_packed_inner(tcx, def.did, stack) {
                             defs.push((def.did, field.ident.span));
@@ -2945,7 +2945,7 @@ impl<'a, 'tcx> AstConv<'tcx> for FnCtxt<'a, 'tcx> {
             predicates: tcx.arena.alloc_from_iter(
                 self.param_env.caller_bounds().iter().filter_map(|predicate| {
                     match predicate.skip_binders() {
-                        ty::PredicateAtom::Trait(data, _) if data.self_ty().is_param(index) => {
+                        ty::PredicateAtom::Trait(data, _) if data.self_ty().is_param(index, tcx) => {
                             // HACK(eddyb) should get the original `Span`.
                             let span = tcx.def_span(def_id);
                             Some((predicate, span))
@@ -3331,7 +3331,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             self.tag(),
         );
 
-        if !canonical_user_type_annotation.is_identity() {
+        if !canonical_user_type_annotation.is_identity(self.tcx) {
             self.typeck_results
                 .borrow_mut()
                 .user_provided_types_mut()
@@ -3704,7 +3704,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         use rustc_middle::ty::error::UnconstrainedNumeric::Neither;
         use rustc_middle::ty::error::UnconstrainedNumeric::{UnconstrainedFloat, UnconstrainedInt};
 
-        assert!(ty.is_ty_infer());
+        assert!(ty.is_ty_infer(tcx));
         let fallback = match self.type_is_unconstrained_numeric(ty) {
             _ if self.is_tainted_by_errors() => self.tcx().ty_error(),
             UnconstrainedInt => self.tcx.types.i32,

@@ -1486,7 +1486,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         if field.name == kw::Invalid {
         } else if self.method_exists(field, expr_t, expr.hir_id, true) {
             self.ban_take_value_of_method(expr, expr_t, field);
-        } else if !expr_t.is_primitive_ty() {
+        } else if !expr_t.is_primitive_ty(self.tcx) {
             self.ban_nonexisting_field(field, base, expr, expr_t);
         } else {
             type_error_struct!(

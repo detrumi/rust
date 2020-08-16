@@ -419,7 +419,7 @@ pub trait PrettyPrinter<'tcx>:
             // Inherent impls. Try to print `Foo::bar` for an inherent
             // impl on `Foo`, but fallback to `<Foo>::bar` if self-type is
             // anything other than a simple path.
-            match self_ty.kind() {
+            match self_ty.kind(self.tcx()) {
                 ty::Adt(..)
                 | ty::Foreign(_)
                 | ty::Bool
@@ -470,7 +470,7 @@ pub trait PrettyPrinter<'tcx>:
     fn pretty_print_type(mut self, ty: Ty<'tcx>) -> Result<Self::Type, Self::Error> {
         define_scoped_cx!(self);
 
-        match *ty.kind() {
+        match *ty.kind(self.tcx()) {
             ty::Bool => p!(write("bool")),
             ty::Char => p!(write("char")),
             ty::Int(t) => p!(write("{}", t.name_str())),
@@ -614,8 +614,8 @@ pub trait PrettyPrinter<'tcx>:
                     let span = self.tcx().hir().span(hir_id);
                     p!(write("@{}", self.tcx().sess.source_map().span_to_string(span)));
 
-                    if substs.as_generator().is_valid() {
-                        let upvar_tys = substs.as_generator().upvar_tys();
+                    if substs.as_generator().is_valid(self.tcx()) {
+                        let upvar_tys = substs.as_generator().upvar_tys(self.tcx());
                         let mut sep = " ";
                         for (&var_id, upvar_ty) in self
                             .tcx()
@@ -632,8 +632,8 @@ pub trait PrettyPrinter<'tcx>:
                 } else {
                     p!(write("@{}", self.tcx().def_path_str(did)));
 
-                    if substs.as_generator().is_valid() {
-                        let upvar_tys = substs.as_generator().upvar_tys();
+                    if substs.as_generator().is_valid(self.tcx()) {
+                        let upvar_tys = substs.as_generator().upvar_tys(self.tcx());
                         let mut sep = " ";
                         for (index, upvar_ty) in upvar_tys.enumerate() {
                             p!(write("{}{}:", sep, index), print(upvar_ty));
@@ -642,7 +642,7 @@ pub trait PrettyPrinter<'tcx>:
                     }
                 }
 
-                if substs.as_generator().is_valid() {
+                if substs.as_generator().is_valid(self.tcx()) {
                     p!(write(" "), print(substs.as_generator().witness()));
                 }
 
@@ -664,8 +664,8 @@ pub trait PrettyPrinter<'tcx>:
                         p!(write("@{}", self.tcx().sess.source_map().span_to_string(span)));
                     }
 
-                    if substs.as_closure().is_valid() {
-                        let upvar_tys = substs.as_closure().upvar_tys();
+                    if substs.as_closure().is_valid(self.tcx()) {
+                        let upvar_tys = substs.as_closure().upvar_tys(self.tcx());
                         let mut sep = " ";
                         for (&var_id, upvar_ty) in self
                             .tcx()
@@ -682,8 +682,8 @@ pub trait PrettyPrinter<'tcx>:
                 } else {
                     p!(write("@{}", self.tcx().def_path_str(did)));
 
-                    if substs.as_closure().is_valid() {
-                        let upvar_tys = substs.as_closure().upvar_tys();
+                    if substs.as_closure().is_valid(self.tcx()) {
+                        let upvar_tys = substs.as_closure().upvar_tys(self.tcx());
                         let mut sep = " ";
                         for (index, upvar_ty) in upvar_tys.enumerate() {
                             p!(write("{}{}:", sep, index), print(upvar_ty));
@@ -692,7 +692,7 @@ pub trait PrettyPrinter<'tcx>:
                     }
                 }
 
-                if self.tcx().sess.verbose() && substs.as_closure().is_valid() {
+                if self.tcx().sess.verbose() && substs.as_closure().is_valid(self.tcx()) {
                     p!(write(" closure_kind_ty="), print(substs.as_closure().kind_ty()));
                     p!(
                         write(" closure_sig_as_fn_ptr_ty="),
@@ -759,7 +759,7 @@ pub trait PrettyPrinter<'tcx>:
             // Special-case `Fn(...) -> ...` and resugar it.
             let fn_trait_kind = self.tcx().fn_trait_kind_from_lang_item(principal.def_id);
             if !self.tcx().sess.verbose() && fn_trait_kind.is_some() {
-                if let ty::Tuple(ref args) = principal.substs.type_at(0).kind() {
+                if let ty::Tuple(ref args) = principal.substs.type_at(0).kind(self.tcx()) {
                     let mut projections = predicates.projection_bounds();
                     if let (Some(proj), None) = (projections.next(), projections.next()) {
                         let tys: Vec<_> = args.iter().map(|k| k.expect_ty()).collect();
@@ -853,7 +853,7 @@ pub trait PrettyPrinter<'tcx>:
             p!(write("..."));
         }
         p!(write(")"));
-        if !output.is_unit() {
+        if !output.is_unit(self.tcx()) {
             p!(write(" -> "), print(output));
         }
 
@@ -938,7 +938,7 @@ pub trait PrettyPrinter<'tcx>:
     ) -> Result<Self::Const, Self::Error> {
         define_scoped_cx!(self);
 
-        match (scalar, &ty.kind()) {
+        match (scalar, &ty.kind(self.tcx())) {
             // Byte strings (&[u8; N])
             (
                 Scalar::Ptr(ptr),
@@ -988,12 +988,12 @@ pub trait PrettyPrinter<'tcx>:
             // Int
             (Scalar::Raw { data, .. }, ty::Uint(ui)) => {
                 let size = Integer::from_attr(&self.tcx(), UnsignedInt(*ui)).size();
-                let int = ConstInt::new(data, size, false, ty.is_ptr_sized_integral());
+                let int = ConstInt::new(data, size, false, ty.is_ptr_sized_integral(self.tcx()));
                 if print_ty { p!(write("{:#?}", int)) } else { p!(write("{:?}", int)) }
             }
             (Scalar::Raw { data, .. }, ty::Int(i)) => {
                 let size = Integer::from_attr(&self.tcx(), SignedInt(*i)).size();
-                let int = ConstInt::new(data, size, true, ty.is_ptr_sized_integral());
+                let int = ConstInt::new(data, size, true, ty.is_ptr_sized_integral(self.tcx()));
                 if print_ty { p!(write("{:#?}", int)) } else { p!(write("{:?}", int)) }
             }
             // Char
@@ -1098,7 +1098,7 @@ pub trait PrettyPrinter<'tcx>:
 
         let u8_type = self.tcx().types.u8;
 
-        match (ct, ty.kind()) {
+        match (ct, ty.kind(self.tcx())) {
             // Byte/string slices, printed as (byte) string literals.
             (
                 ConstValue::Slice { data, start, end },
@@ -1151,7 +1151,7 @@ pub trait PrettyPrinter<'tcx>:
                 );
                 let fields = contents.fields.iter().copied();
 
-                match *ty.kind() {
+                match *ty.kind(self.tcx()) {
                     ty::Array(..) => {
                         p!(write("["), comma_sep(fields), write("]"));
                     }

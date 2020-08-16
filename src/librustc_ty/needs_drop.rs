@@ -77,7 +77,7 @@ where
                 return Some(Err(AlwaysRequiresDrop));
             }
 
-            let components = match needs_drop_components(ty, &tcx.data_layout) {
+            let components = match needs_drop_components(ty, tcx) {
                 Err(e) => return Some(Err(e)),
                 Ok(components) => components,
             };
@@ -90,23 +90,23 @@ where
             };
 
             for component in components {
-                match *component.kind() {
+                match *component.kind(tcx) {
                     _ if component.is_copy_modulo_regions(tcx.at(DUMMY_SP), self.param_env) => (),
 
                     ty::Closure(_, substs) => {
-                        for upvar_ty in substs.as_closure().upvar_tys() {
+                        for upvar_ty in substs.as_closure().upvar_tys(tcx) {
                             queue_type(self, upvar_ty);
                         }
                     }
 
                     ty::Generator(def_id, substs, _) => {
                         let substs = substs.as_generator();
-                        for upvar_ty in substs.upvar_tys() {
+                        for upvar_ty in substs.upvar_tys(tcx) {
                             queue_type(self, upvar_ty);
                         }
 
                         let witness = substs.witness();
-                        let interior_tys = match witness.kind() {
+                        let interior_tys = match witness.kind(tcx) {
                             ty::GeneratorWitness(tys) => tcx.erase_late_bound_regions(tys),
                             _ => {
                                 tcx.sess.delay_span_bug(

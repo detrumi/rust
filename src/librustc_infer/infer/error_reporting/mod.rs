@@ -567,7 +567,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 // if they are both "path types", there's a chance of ambiguity
                 // due to different versions of the same crate
                 if let (&ty::Adt(exp_adt, _), &ty::Adt(found_adt, _)) =
-                    (exp_found.expected.kind(), exp_found.found.kind())
+                    (exp_found.expected.kind(self.tcx), exp_found.found.kind(self.tcx))
                 {
                     report_path_match(err, exp_adt.did, found_adt.did);
                 }
@@ -588,12 +588,12 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         match cause.code {
             ObligationCauseCode::Pattern { origin_expr: true, span: Some(span), root_ty } => {
                 let ty = self.resolve_vars_if_possible(&root_ty);
-                if ty.is_suggestable() {
+                if ty.is_suggestable(self.tcx) {
                     // don't show type `_`
                     err.span_label(span, format!("this expression has type `{}`", ty));
                 }
                 if let Some(ty::error::ExpectedFound { found, .. }) = exp_found {
-                    if ty.is_box() && ty.boxed_ty() == found {
+                    if ty.is_box(self.tcx) && ty.boxed_ty(self.tcx) == found {
                         if let Ok(snippet) = self.tcx.sess.source_map().span_to_snippet(span) {
                             err.span_suggestion(
                                 span,
@@ -951,11 +951,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         let output1 = sig1.output();
         let output2 = sig2.output();
         let (x1, x2) = self.cmp(output1, output2);
-        if !output1.is_unit() {
+        if !output1.is_unit(self.tcx) {
             values.0.push_normal(" -> ");
             (values.0).0.extend(x1.0);
         }
-        if !output2.is_unit() {
+        if !output2.is_unit(self.tcx) {
             values.1.push_normal(" -> ");
             (values.1).0.extend(x2.0);
         }
@@ -965,7 +965,13 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     /// Compares two given types, eliding parts that are the same between them and highlighting
     /// relevant differences, and return two representation of those types for highlighted printing.
     fn cmp(&self, t1: Ty<'tcx>, t2: Ty<'tcx>) -> (DiagnosticStyledString, DiagnosticStyledString) {
-        debug!("cmp(t1={}, t1.kind={:?}, t2={}, t2.kind={:?})", t1, t1.kind(), t2, t2.kind());
+        debug!(
+            "cmp(t1={}, t1.kind={:?}, t2={}, t2.kind={:?})",
+            t1,
+            t1.kind(self.tcx),
+            t2,
+            t2.kind(self.tcx)
+        );
 
         // helper functions
         fn equals<'tcx>(a: Ty<'tcx>, b: Ty<'tcx>) -> bool {
@@ -1002,7 +1008,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         }
 
         // process starts here
-        match (t1.kind(), t2.kind()) {
+        match (t1.kind(self.tcx), t2.kind(self.tcx)) {
             (&ty::Adt(def1, sub1), &ty::Adt(def2, sub2)) => {
                 let sub_no_defaults_1 = self.strip_generic_default_params(def1.did, sub1);
                 let sub_no_defaults_2 = self.strip_generic_default_params(def2.did, sub2);
@@ -1378,7 +1384,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
         impl<'tcx> ty::fold::TypeVisitor<'tcx> for OpaqueTypesVisitor<'tcx> {
             fn visit_ty(&mut self, t: Ty<'tcx>) -> bool {
-                if let Some((kind, def_id)) = TyCategory::from_ty(t) {
+                if let Some((kind, def_id)) = TyCategory::from_ty(t, self.tcx) {
                     let span = self.tcx.def_span(def_id);
                     // Avoid cluttering the output when the "found" and error span overlap:
                     //
@@ -1411,8 +1417,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             Some(values) => {
                 let (is_simple_error, exp_found) = match values {
                     ValuePairs::Types(exp_found) => {
-                        let is_simple_err =
-                            exp_found.expected.is_simple_text() && exp_found.found.is_simple_text();
+                        let is_simple_err = exp_found.expected.is_simple_text(self.tcx)
+                            && exp_found.found.is_simple_text(self.tcx);
                         OpaqueTypesVisitor::visit_expected_found(
                             self.tcx,
                             exp_found.expected,
@@ -1464,7 +1470,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
             };
             match (&terr, expected == found) {
                 (TypeError::Sorts(values), extra) => {
-                    let sort_string = |ty: Ty<'tcx>| match (extra, ty.kind()) {
+                    let sort_string = |ty: Ty<'tcx>| match (extra, ty.kind(self.tcx)) {
                         (true, ty::Opaque(def_id, _)) => format!(
                             " (opaque type at {})",
                             self.tcx
@@ -1475,7 +1481,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                         (true, _) => format!(" ({})", ty.sort_string(self.tcx)),
                         (false, _) => "".to_string(),
                     };
-                    if !(values.expected.is_simple_text() && values.found.is_simple_text())
+                    if !(values.expected.is_simple_text(self.tcx)
+                        && values.found.is_simple_text(self.tcx))
                         || (exp_found.map_or(false, |ef| {
                             // This happens when the type error is a subset of the expectation,
                             // like when you have two references but one is `usize` and the other
@@ -1547,9 +1554,9 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         diag: &mut DiagnosticBuilder<'tcx>,
     ) {
         if let (ty::Adt(exp_def, exp_substs), ty::Ref(_, found_ty, _)) =
-            (exp_found.expected.kind(), exp_found.found.kind())
+            (exp_found.expected.kind(self.tcx), exp_found.found.kind(self.tcx))
         {
-            if let ty::Adt(found_def, found_substs) = *found_ty.kind() {
+            if let ty::Adt(found_def, found_substs) = *found_ty.kind(self.tcx) {
                 let path_str = format!("{:?}", exp_def);
                 if exp_def == &found_def {
                     let opt_msg = "you can convert from `&Option<T>` to `Option<&T>` using \
@@ -1568,14 +1575,14 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                     {
                         let mut show_suggestion = true;
                         for (exp_ty, found_ty) in exp_substs.types().zip(found_substs.types()) {
-                            match *exp_ty.kind() {
+                            match *exp_ty.kind(self.tcx) {
                                 ty::Ref(_, exp_ty, _) => {
-                                    match (exp_ty.kind(), found_ty.kind()) {
+                                    match (exp_ty.kind(self.tcx), found_ty.kind(self.tcx)) {
                                         (_, ty::Param(_))
                                         | (_, ty::Infer(_))
                                         | (ty::Param(_), _)
                                         | (ty::Infer(_), _) => {}
-                                        _ if ty::TyS::same_type(exp_ty, found_ty) => {}
+                                        _ if ty::TyS::same_type(exp_ty, found_ty, self.tcx) => {}
                                         _ => show_suggestion = false,
                                     };
                                 }
@@ -2105,7 +2112,7 @@ impl<'tcx> ObligationCauseExt<'tcx> for ObligationCause<'tcx> {
             // say, also take a look at the error code, maybe we can
             // tailor to that.
             _ => match terr {
-                TypeError::CyclicTy(ty) if ty.is_closure() || ty.is_generator() => {
+                TypeError::CyclicTy(ty) if ty.is_closure(self.tcx) || ty.is_generator(self.tcx) => {
                     Error0644("closure/generator type that references itself")
                 }
                 TypeError::IntrinsicCast => {
@@ -2158,8 +2165,8 @@ impl TyCategory {
         }
     }
 
-    pub fn from_ty(ty: Ty<'_>) -> Option<(Self, DefId)> {
-        match *ty.kind() {
+    pub fn from_ty(ty: Ty<'_>, tcx: TyCtxt<'tcx>) -> Option<(Self, DefId)> {
+        match *ty.kind(tcx) {
             ty::Closure(def_id, _) => Some((Self::Closure, def_id)),
             ty::Opaque(def_id, _) => Some((Self::Opaque, def_id)),
             ty::Generator(def_id, ..) => Some((Self::Generator, def_id)),

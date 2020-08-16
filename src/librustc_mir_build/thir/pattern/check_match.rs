@@ -288,8 +288,8 @@ fn check_for_bindings_named_same_as_variants(cx: &MatchVisitor<'_, '_>, pat: &Pa
             if let Some(ty::BindByValue(hir::Mutability::Not)) =
                 cx.typeck_results.extract_binding_mode(cx.tcx.sess, p.hir_id, p.span)
             {
-                let pat_ty = cx.typeck_results.pat_ty(p).peel_refs();
-                if let ty::Adt(edef, _) = pat_ty.kind() {
+                let pat_ty = cx.typeck_results.pat_ty(p).peel_refs(cx.tcx);
+                if let ty::Adt(edef, _) = pat_ty.kind(cx.tcx) {
                     if edef.is_enum()
                         && edef.variants.iter().any(|variant| {
                             variant.ident == ident && variant.ctor_kind == CtorKind::Const
@@ -442,7 +442,7 @@ fn check_exhaustive<'p, 'tcx>(
     // In the absence of the `exhaustive_patterns` feature, empty matches are not detected by
     // `is_useful` to exhaustively match uninhabited types, so we manually check here.
     if is_empty_match && !cx.tcx.features().exhaustive_patterns {
-        let scrutinee_is_visibly_uninhabited = match scrut_ty.kind() {
+        let scrutinee_is_visibly_uninhabited = match scrut_ty.kind(cx.tcx) {
             ty::Never => true,
             ty::Adt(def, _) => {
                 def.is_enum()
@@ -462,7 +462,7 @@ fn check_exhaustive<'p, 'tcx>(
         Err(err) => err,
     };
 
-    let non_empty_enum = match scrut_ty.kind() {
+    let non_empty_enum = match scrut_ty.kind(cx.tcx) {
         ty::Adt(def, _) => def.is_enum() && !def.variants.is_empty(),
         _ => false,
     };
@@ -540,8 +540,8 @@ fn adt_defined_here(
     ty: Ty<'_>,
     witnesses: &[super::Pat<'_>],
 ) {
-    let ty = ty.peel_refs();
-    if let ty::Adt(def, _) = ty.kind() {
+    let ty = ty.peel_refs(cx.tcx);
+    if let ty::Adt(def, _) = ty.kind(cx.tcx) {
         if let Some(sp) = cx.tcx.hir().span_if_local(def.did) {
             err.span_label(sp, format!("`{}` defined here", ty));
         }

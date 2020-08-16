@@ -202,7 +202,7 @@ impl<'tcx> FromIterator<DtorckConstraint<'tcx>> for DtorckConstraint<'tcx> {
 /// Note also that `needs_drop` requires a "global" type (i.e., one
 /// with erased regions), but this function does not.
 pub fn trivial_dropck_outlives<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
-    match ty.kind() {
+    match ty.kind(tcx) {
         // None of these types have a destructor and hence they do not
         // require anything in particular to outlive the dtor's
         // execution.
@@ -230,7 +230,7 @@ pub fn trivial_dropck_outlives<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
         // check if *any* of those are trivial.
         ty::Tuple(ref tys) => tys.iter().all(|t| trivial_dropck_outlives(tcx, t.expect_ty())),
         ty::Closure(_, ref substs) => {
-            substs.as_closure().upvar_tys().all(|t| trivial_dropck_outlives(tcx, t))
+            substs.as_closure().upvar_tys(tcx).all(|t| trivial_dropck_outlives(tcx, t))
         }
 
         ty::Adt(def, _) => {

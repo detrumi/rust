@@ -10,8 +10,8 @@ use rustc_hir::{QPath, TyKind, WhereBoundPredicate, WherePredicate};
 
 impl<'tcx> TyS<'tcx> {
     /// Similar to `TyS::is_primitive`, but also considers inferred numeric values to be primitive.
-    pub fn is_primitive_ty(&self) -> bool {
-        match self.kind() {
+    pub fn is_primitive_ty(&self, tcx: TyCtxt<'_>) -> bool {
+        match self.kind(tcx) {
             Bool
             | Char
             | Str
@@ -30,8 +30,8 @@ impl<'tcx> TyS<'tcx> {
 
     /// Whether the type is succinctly representable as a type instead of just referred to with a
     /// description in error messages. This is used in the main error message.
-    pub fn is_simple_ty(&self) -> bool {
-        match self.kind() {
+    pub fn is_simple_ty(&self, tcx: TyCtxt<'_>) -> bool {
+        match self.kind(tcx) {
             Bool
             | Char
             | Str
@@ -44,7 +44,7 @@ impl<'tcx> TyS<'tcx> {
                 | InferTy::FreshIntTy(_)
                 | InferTy::FreshFloatTy(_),
             ) => true,
-            Ref(_, x, _) | Array(x, _) | Slice(x) => x.peel_refs().is_simple_ty(),
+            Ref(_, x, _) | Array(x, _) | Slice(x) => x.peel_refs(tcx).is_simple_ty(tcx),
             Tuple(tys) if tys.is_empty() => true,
             _ => false,
         }
@@ -54,17 +54,17 @@ impl<'tcx> TyS<'tcx> {
     /// description in error messages. This is used in the primary span label. Beyond what
     /// `is_simple_ty` includes, it also accepts ADTs with no type arguments and references to
     /// ADTs with no type arguments.
-    pub fn is_simple_text(&self) -> bool {
-        match self.kind() {
+    pub fn is_simple_text(&self, tcx: TyCtxt<'_>) -> bool {
+        match self.kind(tcx) {
             Adt(_, substs) => substs.types().next().is_none(),
-            Ref(_, ty, _) => ty.is_simple_text(),
-            _ => self.is_simple_ty(),
+            Ref(_, ty, _) => ty.is_simple_text(tcx),
+            _ => self.is_simple_ty(tcx),
         }
     }
 
     /// Whether the type can be safely suggested during error recovery.
-    pub fn is_suggestable(&self) -> bool {
-        match self.kind() {
+    pub fn is_suggestable(&self, tcx: TyCtxt<'_>) -> bool {
+        match self.kind(tcx) {
             Opaque(..) | FnDef(..) | FnPtr(..) | Dynamic(..) | Closure(..) | Infer(..)
             | Projection(..) => false,
             _ => true,

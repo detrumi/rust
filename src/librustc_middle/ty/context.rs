@@ -741,7 +741,7 @@ pub type CanonicalUserType<'tcx> = Canonical<'tcx, UserType<'tcx>>;
 impl CanonicalUserType<'tcx> {
     /// Returns `true` if this represents a substitution of the form `[?0, ?1, ?2]`,
     /// i.e., each thing is mapped to a canonical variable with the same index.
-    pub fn is_identity(&self) -> bool {
+    pub fn is_identity(&self, tcx: TyCtxt<'tcx>) -> bool {
         match self.value {
             UserType::Ty(_) => false,
             UserType::TypeOf(_, user_substs) => {
@@ -751,7 +751,7 @@ impl CanonicalUserType<'tcx> {
 
                 user_substs.substs.iter().zip(BoundVar::new(0)..).all(|(kind, cvar)| {
                     match kind.unpack() {
-                        GenericArgKind::Type(ty) => match ty.kind() {
+                        GenericArgKind::Type(ty) => match ty.kind(tcx) {
                             ty::Bound(debruijn, b) => {
                                 // We only allow a `ty::INNERMOST` index in substitutions.
                                 assert_eq!(*debruijn, ty::INNERMOST);
@@ -1500,11 +1500,11 @@ impl<'tcx> TyCtxt<'tcx> {
         }
 
         let ret_ty = self.type_of(scope_def_id);
-        match ret_ty.kind() {
+        match ret_ty.kind(*self) {
             ty::FnDef(_, _) => {
                 let sig = ret_ty.fn_sig(*self);
                 let output = self.erase_late_bound_regions(&sig.output());
-                if output.is_impl_trait() {
+                if output.is_impl_trait(*self) {
                     let fn_decl = self.hir().fn_decl_by_hir_id(hir_id).unwrap();
                     Some((output, fn_decl.output.span()))
                 } else {
@@ -2088,7 +2088,7 @@ impl<'tcx> TyCtxt<'tcx> {
         unsafety: hir::Unsafety,
     ) -> PolyFnSig<'tcx> {
         sig.map_bound(|s| {
-            let params_iter = match s.inputs()[0].kind() {
+            let params_iter = match s.inputs()[0].kind(self) {
                 ty::Tuple(params) => params.into_iter().map(|k| k.expect_ty()),
                 _ => bug!(),
             };

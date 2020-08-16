@@ -33,7 +33,7 @@ impl DefPathBasedNames<'tcx> {
     // When being used for codegen purposes, `debug` should be set to `false`
     // in order to catch unexpected types that should never end up in a type name.
     pub fn push_type_name(&self, t: Ty<'tcx>, output: &mut String, debug: bool) {
-        match *t.kind() {
+        match *t.kind(self.tcx) {
             ty::Bool => output.push_str("bool"),
             ty::Char => output.push_str("char"),
             ty::Str => output.push_str("str"),
@@ -133,7 +133,7 @@ impl DefPathBasedNames<'tcx> {
 
                 output.push(')');
 
-                if !sig.output().is_unit() {
+                if !sig.output().is_unit(self.tcx) {
                     output.push_str(" -> ");
                     self.push_type_name(sig.output(), output, debug);
                 }

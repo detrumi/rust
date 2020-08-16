@@ -1,7 +1,7 @@
 // Helpers for handling cast expressions, used in both
 // typeck and codegen.
 
-use crate::ty::{self, Ty};
+use crate::ty::{self, Ty, TyCtxt};
 
 use rustc_ast::ast;
 use rustc_macros::HashStable;
@@ -49,8 +49,8 @@ pub enum CastKind {
 impl<'tcx> CastTy<'tcx> {
     /// Returns `Some` for integral/pointer casts.
     /// casts like unsizing casts will return `None`
-    pub fn from_ty(t: Ty<'tcx>) -> Option<CastTy<'tcx>> {
-        match *t.kind() {
+    pub fn from_ty(t: Ty<'tcx>, tcx: TyCtxt<'tcx>) -> Option<CastTy<'tcx>> {
+        match *t.kind(tcx) {
             ty::Bool => Some(CastTy::Int(IntTy::Bool)),
             ty::Char => Some(CastTy::Int(IntTy::Char)),
             ty::Int(_) => Some(CastTy::Int(IntTy::I)),
