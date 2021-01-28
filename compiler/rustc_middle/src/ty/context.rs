@@ -69,6 +69,35 @@ use std::mem;
 use std::ops::{Bound, Deref};
 use std::sync::Arc;
 
+#[derive(Copy, Clone)]
+pub struct TyInterner<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl TyInterner<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+        Self { tcx }
+    }
+
+    #[inline]
+    pub fn mk_predicate(self, binder: Binder<PredicateKind<'tcx>>) -> Predicate<'tcx> {
+        let inner = self.tcx.interners.intern_predicate(binder);
+        Predicate { inner }
+    }
+
+    pub fn arena(self) -> &'tcx WorkerLocal<Arena<'tcx>> {
+        self.tcx.arena
+    }
+
+    pub fn ty_rcache(self) -> Lock<FxHashMap<ty::CReaderCacheKey, Ty<'tcx>>> {
+        self.tcx.ty_rcache
+    }
+
+    pub fn queries(self) -> query::Queries<'tcx> {
+        self.tcx.queries
+    }
+}
+
 /// A type that is not publicly constructable. This prevents people from making [`TyKind::Error`]s
 /// except through the error-reporting functions on a [`tcx`][TyCtxt].
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -2045,6 +2074,10 @@ slice_interners!(
 );
 
 impl<'tcx> TyCtxt<'tcx> {
+    pub fn interner(self) -> TyInterner<'tcx> {
+        TyInterner::new(self)
+    }
+
     /// Given a `fn` type, returns an equivalent `unsafe fn` type;
     /// that is, a `fn` type that is equivalent in every way for being
     /// unsafe.

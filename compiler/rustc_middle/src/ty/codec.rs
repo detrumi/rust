@@ -22,6 +22,8 @@ use std::hash::Hash;
 use std::intrinsics;
 use std::marker::DiscriminantKind;
 
+use super::context::TyInterner;
+
 /// The shorthand encoding uses an enum's variant index `usize`
 /// and is offset by this value so it never matches a real variant.
 /// This offset is also chosen so that the first byte is never < 0x80.
@@ -160,7 +162,8 @@ encodable_via_deref! {
 pub trait TyDecoder<'tcx>: Decoder {
     const CLEAR_CROSS_CRATE: bool;
 
-    fn tcx(&self) -> TyCtxt<'tcx>;
+    // fn tcx(&self) -> TyCtxt<'tcx>;
+    fn interner(&self) -> TyInterner<'tcx>;
 
     fn peek_byte(&self) -> u8;
 
@@ -194,7 +197,7 @@ pub fn decode_arena_allocable<'tcx, D, T: ArenaAllocatable<'tcx> + Decodable<D>>
 where
     D: TyDecoder<'tcx>,
 {
-    Ok(decoder.tcx().arena.alloc(Decodable::decode(decoder)?))
+    Ok(decoder.interner().arena().alloc(Decodable::decode(decoder)?))
 }
 
 #[inline]
@@ -204,7 +207,7 @@ pub fn decode_arena_allocable_slice<'tcx, D, T: ArenaAllocatable<'tcx> + Decodab
 where
     D: TyDecoder<'tcx>,
 {
-    Ok(decoder.tcx().arena.alloc_from_iter(<Vec<T> as Decodable<D>>::decode(decoder)?))
+    Ok(decoder.interner().arena().alloc_from_iter(<Vec<T> as Decodable<D>>::decode(decoder)?))
 }
 
 impl<'tcx, D: TyDecoder<'tcx>> Decodable<D> for Ty<'tcx> {
@@ -244,7 +247,7 @@ impl<'tcx, D: TyDecoder<'tcx>> Decodable<D> for ty::Binder<ty::PredicateKind<'tc
 impl<'tcx, D: TyDecoder<'tcx>> Decodable<D> for ty::Predicate<'tcx> {
     fn decode(decoder: &mut D) -> Result<ty::Predicate<'tcx>, D::Error> {
         let predicate_kind = Decodable::decode(decoder)?;
-        let predicate = decoder.tcx().mk_predicate(predicate_kind);
+        let predicate = decoder.interner().mk_predicate(predicate_kind);
         Ok(predicate)
     }
 }
@@ -343,7 +346,7 @@ impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for Allocation {
 
 impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for [(ty::Predicate<'tcx>, Span)] {
     fn decode(decoder: &mut D) -> Result<&'tcx Self, D::Error> {
-        Ok(decoder.tcx().arena.alloc_from_iter(
+        Ok(decoder.interner().arena().alloc_from_iter(
             (0..decoder.read_usize()?)
                 .map(|_| Decodable::decode(decoder))
                 .collect::<Result<Vec<_>, _>>()?,
@@ -353,7 +356,7 @@ impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for [(ty::Predicate<'tcx>, 
 
 impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for [mir::abstract_const::Node<'tcx>] {
     fn decode(decoder: &mut D) -> Result<&'tcx Self, D::Error> {
-        Ok(decoder.tcx().arena.alloc_from_iter(
+        Ok(decoder.interner().arena().alloc_from_iter(
             (0..decoder.read_usize()?)
                 .map(|_| Decodable::decode(decoder))
                 .collect::<Result<Vec<_>, _>>()?,
@@ -363,7 +366,7 @@ impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for [mir::abstract_const::N
 
 impl<'tcx, D: TyDecoder<'tcx>> RefDecodable<'tcx, D> for [mir::abstract_const::NodeId] {
     fn decode(decoder: &mut D) -> Result<&'tcx Self, D::Error> {
-        Ok(decoder.tcx().arena.alloc_from_iter(
+        Ok(decoder.interner().arena().alloc_from_iter(
             (0..decoder.read_usize()?)
                 .map(|_| Decodable::decode(decoder))
                 .collect::<Result<Vec<_>, _>>()?,
