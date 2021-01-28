@@ -57,6 +57,7 @@ use rustc_span::{Span, DUMMY_SP};
 use rustc_target::abi::{Layout, TargetDataLayout, VariantIdx};
 use rustc_target::spec::abi;
 
+use rustc_type_ir::Interner;
 use smallvec::SmallVec;
 use std::any::Any;
 use std::borrow::Borrow;
@@ -68,6 +69,18 @@ use std::iter;
 use std::mem;
 use std::ops::{Bound, Deref};
 use std::sync::Arc;
+
+pub struct TyInterner<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl<'tcx> Interner<'tcx> for TyInterner<'tcx> {
+    type Arena = Arena<'tcx>;
+
+    fn arena(self) -> &'tcx WorkerLocal<Self::Arena> {
+        self.tcx.arena
+    }
+}
 
 /// A type that is not publicly constructable. This prevents people from making [`TyKind::Error`]s
 /// except through the error-reporting functions on a [`tcx`][TyCtxt].
@@ -1011,6 +1024,10 @@ pub struct GlobalCtxt<'tcx> {
 }
 
 impl<'tcx> TyCtxt<'tcx> {
+    pub fn interner(self) -> TyInterner<'tcx> {
+        TyInterner { tcx: self }
+    }
+
     pub fn typeck_opt_const_arg(
         self,
         def: ty::WithOptConstParam<LocalDefId>,

@@ -8,9 +8,18 @@ extern crate bitflags;
 extern crate rustc_macros;
 
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_data_structures::unify::{EqUnifyValue, UnifyKey};
+use rustc_data_structures::{
+    sync::WorkerLocal,
+    unify::{EqUnifyValue, UnifyKey},
+};
 use std::fmt;
 use std::mem::discriminant;
+
+pub trait Interner<'tcx> {
+    type Arena;
+
+    fn arena(self) -> &'tcx WorkerLocal<Self::Arena>;
+}
 
 bitflags! {
     /// Flags that we track on types. These flags are propagated upwards

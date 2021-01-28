@@ -1,9 +1,12 @@
-use crate::dep_graph::{DepNode, DepNodeIndex, SerializedDepNodeIndex};
 use crate::mir::interpret::{AllocDecodingSession, AllocDecodingState};
 use crate::mir::{self, interpret};
 use crate::ty::codec::{RefDecodable, TyDecoder, TyEncoder};
 use crate::ty::context::TyCtxt;
 use crate::ty::{self, Ty};
+use crate::{
+    dep_graph::{DepNode, DepNodeIndex, SerializedDepNodeIndex},
+    ty::context::TyInterner,
+};
 use rustc_data_structures::fingerprint::{Fingerprint, FingerprintDecoder, FingerprintEncoder};
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexSet};
 use rustc_data_structures::sync::{HashMapExt, Lock, Lrc, OnceCell};
@@ -756,6 +759,11 @@ impl<'a, 'tcx> TyDecoder<'tcx> for CacheDecoder<'a, 'tcx> {
     #[inline]
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
+    }
+
+    #[inline]
+    fn interner(&self) -> TyInterner<'tcx> {
+        self.tcx.interner()
     }
 
     #[inline]
