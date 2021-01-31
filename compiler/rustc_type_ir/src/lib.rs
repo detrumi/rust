@@ -8,17 +8,23 @@ extern crate bitflags;
 extern crate rustc_macros;
 
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
-use rustc_data_structures::{
-    sync::WorkerLocal,
-    unify::{EqUnifyValue, UnifyKey},
-};
+use rustc_data_structures::unify::{EqUnifyValue, UnifyKey};
 use std::fmt;
 use std::mem::discriminant;
 
-pub trait Interner<'tcx> {
-    type Arena;
+pub trait Interner {
+    type ArenaAllocatable;
 
-    fn arena(self) -> &'tcx WorkerLocal<Self::Arena>;
+    fn alloc<T: Self::ArenaAllocatable, U>(&self, value: T) -> &mut T;
+
+    fn alloc_from_iter<'a, T: Self::ArenaAllocatable, U>(
+        &'a self,
+        iter: impl IntoIterator<Item = T>,
+    ) -> &'a mut [T];
+}
+
+pub trait HasInterner<'tcx> {
+    type Interner: Interner<'tcx>;
 }
 
 bitflags! {

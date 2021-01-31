@@ -29,6 +29,7 @@ use rustc_span::hygiene::{
 use rustc_span::source_map::{SourceMap, StableSourceFileId};
 use rustc_span::CachingSourceMapView;
 use rustc_span::{BytePos, ExpnData, SourceFile, Span, DUMMY_SP};
+use rustc_type_ir::HasInterner;
 use std::collections::hash_map::Entry;
 use std::iter::FromIterator;
 use std::mem;
@@ -751,6 +752,10 @@ where
     assert_eq!((end_pos - start_pos) as u64, expected_len);
 
     Ok(value)
+}
+
+impl<'a, 'tcx> HasInterner for CacheDecoder<'a, 'tcx> {
+    type Interner = TyInterner<'tcx>;
 }
 
 impl<'a, 'tcx> TyDecoder<'tcx> for CacheDecoder<'a, 'tcx> {

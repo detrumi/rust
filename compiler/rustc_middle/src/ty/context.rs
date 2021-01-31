@@ -74,11 +74,18 @@ pub struct TyInterner<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'tcx> Interner<'tcx> for TyInterner<'tcx> {
-    type Arena = Arena<'tcx>;
+impl<'tcx> Interner for TyInterner<'tcx> {
+    type ArenaAllocatable = ArenaAllocatable<'tcx, U>;
 
-    fn arena(self) -> &'tcx WorkerLocal<Self::Arena> {
-        self.tcx.arena
+    fn alloc<T: ArenaAllocatable<'tcx, U>, U>(&self, value: T) -> &mut T {
+        self.tcx.arena.alloc(value)
+    }
+
+    fn alloc_from_iter<'a, T: ArenaAllocatable<U>, U>(
+        &'a self,
+        iter: impl IntoIterator<Item = T>,
+    ) -> &'a mut [T] {
+        self.tcx.arena.alloc_from_iter(iter)
     }
 }
 
